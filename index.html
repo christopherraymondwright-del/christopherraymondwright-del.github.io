@@ -3,151 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Market Pulse</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@800&family=DM+Mono&family=DM+Sans:wght@300;400&display=swap" rel="stylesheet">
     <style>
-        :root { --gold: #d4b055; --bg: #080808; --card: #121212; --text: #ddd5c5; --error: #ff5f5f; }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { 
-            background: var(--bg); color: var(--text); 
-            font-family: 'DM Sans', sans-serif; margin: 0; 
-            padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom);
-            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
-        }
-        .header { text-align: center; margin: 60px 0 40px; }
-        .logo { font-family: 'Playfair Display', serif; font-size: 52px; color: #ece4d2; letter-spacing: -1px; }
-        .card { 
-            width: 100%; max-width: 450px; background: var(--card); 
-            padding: 40px 30px; border-radius: 20px; border: 1px solid #222; 
-            box-shadow: 0 30px 60px rgba(0,0,0,0.8); text-align: center; 
-        }
-        .btn { 
-            background: var(--gold); color: #000; border: none; 
-            padding: 20px; font-family: 'DM Mono'; font-weight: bold; 
-            border-radius: 12px; cursor: pointer; width: 100%; font-size: 14px;
-            letter-spacing: 1px; transition: transform 0.1s;
-        }
-        .btn:active { transform: scale(0.97); opacity: 0.8; }
-        .status { margin-top: 25px; font-family: 'DM Mono'; font-size: 11px; color: var(--gold); text-transform: uppercase; letter-spacing: 2px; }
-        
-        /* Debug Console */
-        #debug-log { 
-            margin-top: 30px; width: 100%; max-width: 450px;
-            background: #000; color: #666; font-family: 'DM Mono'; 
-            font-size: 10px; padding: 15px; border-radius: 8px;
-            text-align: left; max-height: 150px; overflow-y: auto;
-            border: 1px solid #1a1a1a; display: none;
-        }
-        .log-error { color: var(--error); }
-        .script-view {
-            margin-top: 25px; text-align: left; font-size: 15px; line-height: 1.8;
-            color: #b0a898; border-top: 1px solid #222; padding-top: 20px; display: none;
-        }
+        :root { --gold: #d4b055; --bg: #080808; --card: #121212; --text: #ddd5c5; }
+        body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; text-align: center; }
+        .card { width: 100%; max-width: 450px; background: var(--card); padding: 40px; border-radius: 24px; border: 1px solid #222; margin-top: 40px; }
+        .btn { background: var(--gold); color: #000; border: none; padding: 20px; font-family: 'DM Mono'; font-weight: bold; border-radius: 12px; width: 100%; margin-top: 20px; font-size: 14px; }
+        .btn:disabled { opacity: 0.3; }
+        #audio-player { width: 100%; margin-top: 25px; display: none; }
+        .status { margin-top: 25px; font-family: 'DM Mono'; font-size: 10px; color: var(--gold); letter-spacing: 2px; }
+        .download-btn { display: none; margin-top: 20px; color: var(--gold); text-decoration: none; font-family: 'DM Mono'; font-size: 12px; border: 1px solid var(--gold); padding: 10px; border-radius: 8px; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <div class="logo">Market Pulse</div>
-    <div style="font-family:'DM Mono'; font-size:9px; color:var(--gold); margin-top:12px; letter-spacing:4px;">AI FINANCIAL DAILY</div>
-</div>
-
 <div class="card">
-    <div id="main-ui">
-        <p style="margin-bottom:30px; font-weight:300; opacity:0.7;">Tap to search live markets and generate today's briefing.</p>
-        <button class="btn" onclick="startBriefing()">GENERATE EPISODE</button>
-    </div>
+    <h1 style="font-family:'Playfair Display'; font-size: 42px; margin: 0;">Market Pulse</h1>
+    <p style="opacity: 0.6; font-size: 13px; margin-top: 10px; letter-spacing: 1px;">LIVE MARKET AUDIO BRIEFING</p>
+    
+    <button class="btn" id="generate-btn" onclick="generateBriefing()">GENERATE DAILY EPISODE</button>
+    
     <div id="status" class="status">READY</div>
-    <div id="script-container" class="script-view"></div>
+    
+    <audio id="audio-player" controls></audio>
+    <a id="download-link" class="download-btn">DOWNLOAD M4A FILE</a>
 </div>
-
-<div id="debug-log"></div>
 
 <script>
-    const logEl = document.getElementById('debug-log');
-    const statusEl = document.getElementById('status');
-    const scriptEl = document.getElementById('script-container');
+    const PROXY = "https://cors-anywhere.herokuapp.com/";
 
-    function log(msg, isError = false) {
-        logEl.style.display = "block";
-        const div = document.createElement('div');
-        div.className = isError ? 'log-error' : '';
-        div.innerHTML = `> ${msg}`;
-        logEl.appendChild(div);
-        logEl.scrollTop = logEl.scrollHeight;
-    }
-
-    async function startBriefing() {
-        let apiKey = localStorage.getItem('gemini_api_key');
-        if (!apiKey) {
-            apiKey = prompt("Please enter your Gemini API Key:");
-            if (apiKey) localStorage.setItem('gemini_api_key', apiKey);
-        }
+    async function generateBriefing() {
+        const apiKey = localStorage.getItem('gemini_api_key') || prompt("Enter your Gemini API Key:");
         if (!apiKey) return;
+        localStorage.setItem('gemini_api_key', apiKey);
 
-        statusEl.innerText = "CONNECTING...";
-        log("Initiating request to Gemini 2.0 Flash...");
+        const btn = document.getElementById('generate-btn');
+        const status = document.getElementById('status');
+        const player = document.getElementById('audio-player');
+        const download = document.getElementById('download-link');
 
-        // Note: Using a CORS proxy is often necessary for GitHub Pages.
-        // If you get a 'Failed to fetch', visit https://cors-anywhere.herokuapp.com/ to activate.
-        const PROXY = "https://cors-anywhere.herokuapp.com/";
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+        btn.disabled = true;
+        status.innerText = "SEARCHING & SPEAKING...";
 
         try {
-            const response = await fetch(PROXY + API_URL, {
+            // We use gemini-2.0-flash which supports multimodal output (AUDIO)
+            const url = `${PROXY}https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{
-                        parts: [{ text: "Search for today's top stock market headlines for " + new Date().toDateString() + ". Write a sharp, conversational 3-minute podcast script. Focus on trends and one 12-month stock pick. Strictly avoid mentioning Elon Musk or his companies. No markdown, just pure spoken text." }]
+                        parts: [{ text: "Search for today's top stock market news. Create a 3-minute professional podcast script. Do not mention Elon Musk or his companies. Focus on a 12-month outlook. Output the response as audio." }]
                     }],
-                    tools: [{ google_search: {} }] // Gemini 2.0 Search Tool
+                    tools: [{ google_search: {} }],
+                    generationConfig: {
+                        responseModalities: ["AUDIO"],
+                        speechConfig: {
+                            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } // Professional male voice
+                        }
+                    }
                 })
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                log(`API Error: ${response.status} - ${JSON.stringify(errorData)}`, true);
-                throw new Error("API_REJECTION");
-            }
-
             const data = await response.json();
-            log("Data received. Processing script...");
             
-            const script = data.candidates[0].content.parts[0].text;
+            // Extract the base64 audio data from Gemini's response
+            const audioPart = data.candidates[0].content.parts.find(p => p.inlineData);
+            if (!audioPart) throw new Error("No audio returned. Check if your API key has 'Speech' enabled.");
+
+            const audioBase64 = audioPart.inlineData.data;
+            const audioBlob = base64ToBlob(audioBase64, 'audio/mp3');
+            const audioUrl = URL.createObjectURL(audioBlob);
+
+            // Setup UI
+            status.innerText = "EPISODE READY";
+            player.src = audioUrl;
+            player.style.display = "block";
             
-            statusEl.innerText = "SPEAKING...";
-            scriptEl.innerText = script;
-            scriptEl.style.display = "block";
+            download.href = audioUrl;
+            download.download = `MarketPulse_${new Date().toISOString().split('T')[0]}.m4a`;
+            download.style.display = "inline-block";
 
-            // Mobile Speech Synthesis
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(script);
-            utterance.rate = 1.05;
-            utterance.pitch = 1.0;
-            
-            // Selection of a more 'premium' voice if available
-            const voices = window.speechSynthesis.getVoices();
-            const preferredVoice = voices.find(v => v.name.includes('Samantha') || v.name.includes('Google US English'));
-            if (preferredVoice) utterance.voice = preferredVoice;
-
-            window.speechSynthesis.speak(utterance);
-            utterance.onend = () => { statusEl.innerText = "EPISODE FINISHED"; log("Audio playback complete."); };
-
-        } catch (error) {
-            statusEl.innerText = "ERROR";
-            if (error.message === "Failed to fetch") {
-                log("CORS BLOCK: Please visit cors-anywhere.herokuapp.com and tap 'Request temporary access' then try again.", true);
-            } else {
-                log(error.message, true);
-            }
+        } catch (e) {
+            console.error(e);
+            status.innerText = "ERROR: " + (e.message.includes("fetch") ? "ACTIVATE CORS PROXY FIRST" : "CHECK API KEY");
+        } finally {
+            btn.disabled = false;
         }
     }
 
-    // Pre-load voices for iOS
-    window.speechSynthesis.getVoices();
+    function base64ToBlob(base64, type) {
+        const bin = atob(base64);
+        const len = bin.length;
+        const arr = new Uint8Array(len);
+        for (let i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
+        return new Blob([arr], { type: type });
+    }
 </script>
 </body>
 </html>
