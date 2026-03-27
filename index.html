@@ -3,104 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Market Pulse</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@800&family=DM+Mono&family=DM+Sans:wght@300;400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@800&family=DM+Mono&display=swap" rel="stylesheet">
     <style>
         :root { --gold: #d4b055; --bg: #080808; --card: #121212; --text: #ddd5c5; }
-        body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; text-align: center; }
-        .card { width: 100%; max-width: 450px; background: var(--card); padding: 40px; border-radius: 24px; border: 1px solid #222; margin-top: 40px; }
-        .btn { background: var(--gold); color: #000; border: none; padding: 20px; font-family: 'DM Mono'; font-weight: bold; border-radius: 12px; width: 100%; margin-top: 20px; font-size: 14px; }
-        .btn:disabled { opacity: 0.3; }
-        #audio-player { width: 100%; margin-top: 25px; display: none; }
-        .status { margin-top: 25px; font-family: 'DM Mono'; font-size: 10px; color: var(--gold); letter-spacing: 2px; }
-        .download-btn { display: none; margin-top: 20px; color: var(--gold); text-decoration: none; font-family: 'DM Mono'; font-size: 12px; border: 1px solid var(--gold); padding: 10px; border-radius: 8px; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; padding: env(safe-area-inset-top) 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        .card { width: 100%; max-width: 400px; background: var(--card); padding: 40px 30px; border-radius: 24px; border: 1px solid #222; margin-top: 50px; box-shadow: 0 20px 50px rgba(0,0,0,0.9); }
+        .btn { background: var(--gold); color: #000; border: none; padding: 20px; font-family: 'DM Mono'; font-weight: bold; border-radius: 14px; width: 100%; font-size: 14px; letter-spacing: 1px; }
+        .status { margin-top: 25px; font-family: 'DM Mono'; font-size: 10px; color: var(--gold); opacity: 0.6; }
+        #debug { font-size: 10px; color: #666; margin-top: 20px; text-align: left; width: 100%; overflow-x: auto; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <h1 style="font-family:'Playfair Display'; font-size: 42px; margin: 0;">Market Pulse</h1>
-    <p style="opacity: 0.6; font-size: 13px; margin-top: 10px; letter-spacing: 1px;">LIVE MARKET AUDIO BRIEFING</p>
+    <p style="opacity: 0.5; font-size: 12px; margin-bottom: 30px;">DAILY BRIEFING GENERATOR</p>
     
-    <button class="btn" id="generate-btn" onclick="generateBriefing()">GENERATE DAILY EPISODE</button>
-    
+    <button class="btn" id="go-btn" onclick="run()">GENERATE & PLAY</button>
     <div id="status" class="status">READY</div>
-    
-    <audio id="audio-player" controls></audio>
-    <a id="download-link" class="download-btn">DOWNLOAD M4A FILE</a>
+    <div id="debug"></div>
 </div>
 
 <script>
     const PROXY = "https://cors-anywhere.herokuapp.com/";
 
-    async function generateBriefing() {
-        const apiKey = localStorage.getItem('gemini_api_key') || prompt("Enter your Gemini API Key:");
-        if (!apiKey) return;
-        localStorage.setItem('gemini_api_key', apiKey);
-
-        const btn = document.getElementById('generate-btn');
+    async function run() {
         const status = document.getElementById('status');
-        const player = document.getElementById('audio-player');
-        const download = document.getElementById('download-link');
+        const debug = document.getElementById('debug');
+        const btn = document.getElementById('go-btn');
+        
+        let key = localStorage.getItem('gemini_key');
+        if (!key) {
+            key = prompt("Paste your Gemini API Key:");
+            if (key) localStorage.setItem('gemini_key', key);
+        }
+        if (!key) return;
 
         btn.disabled = true;
-        status.innerText = "SEARCHING & SPEAKING...";
+        status.innerText = "FETCHING MARKET DATA...";
+        debug.innerText = "";
 
         try {
-            // We use gemini-2.0-flash which supports multimodal output (AUDIO)
-            const url = `${PROXY}https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            // Using 1.5 Flash for maximum reliability on Free Tier
+            const api = `${PROXY}https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
             
-            const response = await fetch(url, {
+            const response = await fetch(api, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    contents: [{
-                        parts: [{ text: "Search for today's top stock market news. Create a 3-minute professional podcast script. Do not mention Elon Musk or his companies. Focus on a 12-month outlook. Output the response as audio." }]
-                    }],
-                    tools: [{ google_search: {} }],
-                    generationConfig: {
-                        responseModalities: ["AUDIO"],
-                        speechConfig: {
-                            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } // Professional male voice
-                        }
-                    }
+                    contents: [{ parts: [{ text: "Search today's stock news. Write a short, punchy 1-minute podcast script. No Elon Musk mentions. End with one stock pick for 2026. No markdown, just text." }] }],
+                    tools: [{ google_search_retrieval: {} }]
                 })
             });
 
             const data = await response.json();
-            
-            // Extract the base64 audio data from Gemini's response
-            const audioPart = data.candidates[0].content.parts.find(p => p.inlineData);
-            if (!audioPart) throw new Error("No audio returned. Check if your API key has 'Speech' enabled.");
 
-            const audioBase64 = audioPart.inlineData.data;
-            const audioBlob = base64ToBlob(audioBase64, 'audio/mp3');
-            const audioUrl = URL.createObjectURL(audioBlob);
+            if (data.error) {
+                throw new Error(`${data.error.status}: ${data.error.message}`);
+            }
 
-            // Setup UI
-            status.innerText = "EPISODE READY";
-            player.src = audioUrl;
-            player.style.display = "block";
+            const script = data.candidates[0].content.parts[0].text;
+            status.innerText = "SPEAKING...";
+
+            // HIGH QUALITY iOS VOICE SETTINGS
+            window.speechSynthesis.cancel();
+            const talk = new SpeechSynthesisUtterance(script);
             
-            download.href = audioUrl;
-            download.download = `MarketPulse_${new Date().toISOString().split('T')[0]}.m4a`;
-            download.style.display = "inline-block";
+            // Try to find the "Premium" iOS voice
+            const voices = window.speechSynthesis.getVoices();
+            talk.voice = voices.find(v => v.name.includes('Samantha') || v.name.includes('Daniel')) || voices[0];
+            talk.rate = 1.0;
+            talk.pitch = 1.0;
+
+            window.speechSynthesis.speak(talk);
+            
+            talk.onend = () => { status.innerText = "BRIEFING COMPLETE"; btn.disabled = false; };
 
         } catch (e) {
-            console.error(e);
-            status.innerText = "ERROR: " + (e.message.includes("fetch") ? "ACTIVATE CORS PROXY FIRST" : "CHECK API KEY");
-        } finally {
             btn.disabled = false;
+            status.innerText = "ERROR";
+            debug.innerText = "Full Error: " + e.message;
+            if (e.message.includes("403")) debug.innerText += " (Check if your API Key is restricted or if you need to enable the Grounding tool in AI Studio)";
+            if (e.message.includes("fetch")) debug.innerText = "CORS BLOCK: Please go to cors-anywhere.herokuapp.com and tap 'Request Access'.";
         }
     }
 
-    function base64ToBlob(base64, type) {
-        const bin = atob(base64);
-        const len = bin.length;
-        const arr = new Uint8Array(len);
-        for (let i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
-        return new Blob([arr], { type: type });
-    }
+    // iOS requires a user gesture to load voices
+    window.speechSynthesis.getVoices();
 </script>
 </body>
 </html>
